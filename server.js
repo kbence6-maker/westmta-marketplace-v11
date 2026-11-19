@@ -23,8 +23,8 @@ function startServer(){
  app.use('/api',(req,res,next)=>{res.set('Cache-Control','no-store');next()});
  const authLimit=rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:'draft-7',legacyHeaders:false,message:{error:'Túl sok próbálkozás. Próbáld később.'}});
  const writeLimit=rateLimit({windowMs:60*60*1000,limit:60,standardHeaders:'draft-7',legacyHeaders:false,message:{error:'Túl sok kérés. Próbáld később.'}});
- app.get('/health',(req,res)=>res.json({ok:true,service:'westrent',build:'westrent-onkiszolgalo-20261119'}));
- app.get('/api/config',(req,res)=>res.json({catalog:getCatalog(),companyName:(process.env.COMPANY_NAME && process.env.COMPANY_NAME!=='IC Autóközpont' ? process.env.COMPANY_NAME : 'WestRent'),companyPhone:process.env.IC_COMPANY_PHONE||'',commission:store.DEFAULT_PCT(),admin:isAdmin(req),user:getUser(req),requiresVerification:false,taxPercent:5}));
+ app.get('/health',(req,res)=>res.json({ok:true,service:'westrent',build:'westrent-privat-tuning-history-20261119'}));
+ app.get('/api/config',(req,res)=>res.json({catalog:getCatalog(),companyName:(process.env.COMPANY_NAME && process.env.COMPANY_NAME!=='IC Autóközpont' ? process.env.COMPANY_NAME : 'WestRent'),companyPhone:process.env.IC_COMPANY_PHONE||'',commission:store.DEFAULT_PCT(),admin:isAdmin(req),user:getUser(req),requiresVerification:false}));
  app.get('/api/stats',(req,res)=>res.json(store.stats()));
  app.get('/api/listings',handler((req,res)=>res.json(store.listListings(req.query,false))));
  app.get('/api/listings/:id',handler((req,res)=>{const item=store.getListing(req.params.id);if(!item||item.kind!=='rental'||!['active','rented'].includes(item.status)||item.approval_status!=='approved')return res.status(404).json({error:'Nem található hirdetés.'});res.json(item)}));
@@ -59,7 +59,8 @@ function startServer(){
  app.patch('/api/my/listings/:id',writeLimit,loginRequired,handler((req,res)=>res.json(store.updateOwnListing(res.locals.user.id,req.params.id,req.body||{}))));
  app.delete('/api/my/listings/:id',writeLimit,loginRequired,handler((req,res)=>res.json(store.deleteOwnListing(res.locals.user.id,req.params.id))));
  app.post('/api/my/requests',writeLimit,loginRequired,handler((req,res)=>res.status(201).json(store.createRequest(res.locals.user.id,req.body||{}))));
- app.post('/api/my/tuning-requests',writeLimit,loginRequired,handler((req,res)=>res.status(201).json(store.createTuningRequest(res.locals.user.id,req.body||{}))));
+ const tuningLimit=rateLimit({windowMs:60*60*1000,limit:5,standardHeaders:'draft-7',legacyHeaders:false,message:{error:'Túl sok tuningkérelem. Próbáld később.'}});
+ app.post('/api/tuning-requests',tuningLimit,handler((req,res)=>res.status(201).json(store.createTuningRequest(req.body||{}))));
  app.patch('/api/my/received/:id',writeLimit,loginRequired,handler((req,res)=>res.json(store.reviewPrivateRequest(res.locals.user.id,req.params.id,req.body?.status))));
  // Admin: saját, külön adminjelszó; nem kérjük a játékhoz tartozó jelszót.
  app.post('/api/admin/login',authLimit,(req,res)=>{const secret=process.env.ADMIN_PASSWORD||'',provided=String(req.body?.password||'');if(secret.length<20)return res.status(503).json({error:'Legalább 20 karakteres ADMIN_PASSWORD szükséges.'});const a=crypto.createHash('sha256').update(secret).digest(),b=crypto.createHash('sha256').update(provided).digest();if(!crypto.timingSafeEqual(a,b))return res.status(401).json({error:'Helytelen tulajdonosi jelszó.'});const token=crypto.randomBytes(32).toString('hex');adminSessions.set(crypto.createHash('sha256').update(token).digest('hex'),Date.now()+12*3600*1000);res.setHeader('Set-Cookie',safeCookie(req,'ic_admin',token,43200));res.json({ok:true})});
@@ -75,7 +76,10 @@ function startServer(){
  app.get('/api/owner/finance',adminRequired,(req,res)=>res.json(store.incomeReport()));
  app.post('/api/owner/finance',writeLimit,adminRequired,handler((req,res)=>res.status(201).json(store.saveIncome(req.body||{}))));
  app.delete('/api/owner/finance/:id',adminRequired,handler((req,res)=>res.json({ok:store.deleteIncome(req.params.id)})));
+ app.delete('/api/owner/finance',adminRequired,handler((req,res)=>{if(req.body?.confirm!=='TORLES')return res.status(400).json({error:'A törlést meg kell erősíteni.'});res.json({deleted:store.clearIncomeHistory()})}));
  app.get('/api/owner/tuning-requests',adminRequired,(req,res)=>res.json(store.ownerTuningRequests()));
+ app.delete('/api/owner/tuning-requests/:id',adminRequired,handler((req,res)=>res.json({ok:store.deleteTuningRequest(req.params.id)})));
+ app.delete('/api/owner/tuning-requests',adminRequired,handler((req,res)=>{if(req.body?.confirm!=='TORLES')return res.status(400).json({error:'A törlést meg kell erősíteni.'});res.json({deleted:store.clearTuningHistory()})}));
  app.use(express.static(path.join(__dirname,'public'),{index:'index.html'}));
  app.get('*',(req,res)=>res.sendFile(path.join(__dirname,'public','index.html')));
  app.use((err,req,res,next)=>{console.error('[Web]',err);if(!res.headersSent)res.status(500).json({error:'Szerverhiba.'})});

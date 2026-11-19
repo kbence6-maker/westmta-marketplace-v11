@@ -7,8 +7,8 @@ Csak játékbeli (IC $) autóbérlésekhez. Nem hivatalos WestMTA-integráció, 
 - Minden regisztrált játékos azonnal magánhirdetést adhat fel a 81 V11 járművel, öt tuninggal, saját képpel (max. 5 MB), napi/heti/havi díjjal és kaucióval.
 - A játékos saját hirdetését bármikor **Elérhető / Bérbe adva** állapotra állíthatja, szerkesztheti vagy törölheti; a bérbe adott autó látható marad.
 - Bérlés egyeztetése: időtartam, indulási dátum, IC telefonszám a profilból, üzenet. Az autó hirdetője látja a megkereséseket, nincs jóváhagyási lépés.
-- Egyedi tuningkérelem: márka, modell, 5 V11 tuning és megjegyzés. A kérelmet csak a tulajdonosi felület látja, az igénylő a sajátját.
-- Csak tulajdonosi jelszóval elérhető **Tulajdonosi bevételek**: kézzel felvitt tényleges IC befizetések, becsült 5% adó, nettó összeg, tuningigények.
+- Egyedi tuningkérelem: kizárólag IC telefonszám. Nem szükséges regisztráció, autóválasztás vagy leírás. A beküldést a rendszer IP-címenként óránként 5 alkalomra korlátozza; csak a cégtulajdonos látja a megkereséseket.
+- Csak tulajdonosi jelszóval elérhető **Tulajdonosi bevételek**: kézzel felvitt tényleges IC befizetések, becsült 5% adó, nettó összeg; bevételi history és tuningmegkeresések egyesével vagy tömegesen törölhetők. A játékosok nem látják az adót sem a hirdetéseken, sem a hirdetésfeladási űrlapon, sem a nyilvános API-n keresztül.
 - A beküldött példa alapján a kalkulált adó **5%** (17 500 000 $ után 875 000 $). Ez becslés; a játék levonásai eltérhetnek.
 - A már meglévő IC-fiókok, hirdetések, képek és korábbi kérelmek megmaradnak ugyanazon SQLite adatbázisban. Régi, függő céges közvetítések magánhirdetésként automatikusan publikálódnak, kivéve a korábban törölteket.
 
@@ -27,7 +27,11 @@ A pénzmozgásokat a rendszer **nem érzékeli automatikusan**. A kézzel bevitt
 3. Variables: `DATA_DIR=/data`, `COMPANY_NAME=WestRent`, `PUBLIC_URL=https://westrenting.co.uk`, `ADMIN_PASSWORD=<új erős jelszó>`.
 4. A `REQUIRE_IC_VERIFICATION` és `BROKER_COMMISSION_PERCENT` már nem szükséges; a régi értékük nem befolyásolja az önkiszolgáló működést.
 5. GitHub commit után állítsd be az Auto Deploy-t, vagy kézzel telepítsd az új commitot.
-6. `/health` végponton a `westrent-onkiszolgalo-20261119` buildet keresd. Böngészőben utána `Ctrl+Shift+R`.
+6. `/health` végponton a `westrent-privat-tuning-history-20261119` buildet keresd. Böngészőben utána `Ctrl+Shift+R`.
 
 Kódszintaxis ellenőrzés: `npm run check`.
 Teszt: `npm test` (telepített függőségek szükségesek).
+
+## Fontos: előzmények törlése
+
+A Tulajdonosi bevételek felületen egyesével és egyben törölhetők a kézzel rögzített bevételek, valamint a beérkezett tuningmegkeresések. **Végleges törlés**: a bevételi összesítők újraszámolódnak; előtte érdemes az adatbázisról mentést készíteni. Az IC fiókok és autóhirdetések nem törlődnek ettől.

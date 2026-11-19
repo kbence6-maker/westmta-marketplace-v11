@@ -91,3 +91,8 @@
 .finance-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}.finance-stats h2{margin:9px 0 0;color:#ff9ba9}.owner-finance .content-card{margin-bottom:15px}
 .danger-action{border-color:#8a3b50!important;color:#ff9baa!important}
 @media(max-width:700px){.finance-stats{grid-template-columns:1fr}}
+
+/* Tulajdonosi előzmények kezelése – a nem bejelentkezett látogatónak nem jelenik meg. */
+.history-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:10px}
+.history-heading h3{margin:0}
+.history-heading .danger-action{font-size:11px}

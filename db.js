@@ -234,16 +234,18 @@ function incomeReport(){
  return {rows,summary:{gross:sum.gross,tax:sum.tax,net:sum.gross-sum.tax,count:sum.count},taxPercent:TAX_PERCENT};
 }
 function deleteIncome(id){return conn().prepare('DELETE FROM owner_income WHERE id=?').run(str(id,80)).changes>0}
-function createTuningRequest(uid,input){
- const user=getUser(uid);if(!user)throw Error('Jelentkezz be az egyedi tuningigényhez.');
- const car=fullCar(input),src=input.tuning||{};const tuning={};
- for(const [key] of FIELDS){const v=str(src[key]||'Gyári',30);if(!options(key).includes(v))throw Error('Érvénytelen tuning: '+key);tuning[key]=v}
- const notes=str(input.notes,1000),rid=id(),created_at=now();
+function clearIncomeHistory(){return conn().prepare('DELETE FROM owner_income').run().changes}
+function deleteTuningRequest(id){return conn().prepare('DELETE FROM tuning_requests WHERE id=?').run(str(id,80)).changes>0}
+function clearTuningHistory(){return conn().prepare('DELETE FROM tuning_requests').run().changes}
+function createTuningRequest(input){
+ // Csak a játékbeli telefonszám szükséges, az igény később IC módon egyeztethető.
+ const phone=normalizePhone(input.phone);
+ const rid=id(),created_at=now();
  conn().prepare('INSERT INTO tuning_requests (id,user_id,ic_name,phone,brand,model,tuning,notes,created_at) VALUES (?,?,?,?,?,?,?,?,?)')
- .run(rid,uid,user.ic_name,user.phone,car.brand,car.model,JSON.stringify(toList(tuning)),notes,created_at);
+ .run(rid,'','',phone,'','','[]','',created_at);
  return {id:rid,created_at};
 }
 function myTuningRequests(uid){return conn().prepare('SELECT id,brand,model,tuning,notes,created_at FROM tuning_requests WHERE user_id=? ORDER BY created_at DESC LIMIT 100').all(uid).map(x=>({...x,tuning:JSON.parse(x.tuning)}))}
 function ownerTuningRequests(){return conn().prepare('SELECT * FROM tuning_requests ORDER BY created_at DESC LIMIT 300').all().map(x=>({...x,tuning:JSON.parse(x.tuning)}))}
 
-module.exports={getUploadDirectory,saveUploadOwnership,initDatabase,registerUser,loginUser,createSession,findSession,removeSession,listUsers,getUser,verifyUser,deleteUnverifiedUser,publicUser,needsVerify,createOwnListing,getListing,listListings,myListings,updateOwnListing,pendingBrokerages,reviewBrokerage,changeStatus,deleteOwnListing,deleteCompanyListing,createRequest,myRequests,receivedRequests,reviewPrivateRequest,allRequests,reviewRequest,stats,DEFAULT_PCT,taxAmount,saveIncome,incomeReport,deleteIncome,createTuningRequest,myTuningRequests,ownerTuningRequests};
+module.exports={getUploadDirectory,saveUploadOwnership,initDatabase,registerUser,loginUser,createSession,findSession,removeSession,listUsers,getUser,verifyUser,deleteUnverifiedUser,publicUser,needsVerify,createOwnListing,getListing,listListings,myListings,updateOwnListing,pendingBrokerages,reviewBrokerage,changeStatus,deleteOwnListing,deleteCompanyListing,createRequest,myRequests,receivedRequests,reviewPrivateRequest,allRequests,reviewRequest,stats,DEFAULT_PCT,taxAmount,saveIncome,incomeReport,deleteIncome,clearIncomeHistory,createTuningRequest,deleteTuningRequest,clearTuningHistory,myTuningRequests,ownerTuningRequests};

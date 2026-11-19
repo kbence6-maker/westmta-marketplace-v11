@@ -27,6 +27,6 @@ test('A képek nem vágódnak le, bérbe adott jelzés és törlésgomb létezik
  assert.match(css,/westrent-hero-user-car\.png/);
 });
 test('A feltöltött fájlok gyökérből induló Railway csomagba valók',()=>{
- assert.match(src('public/index.html'),/westrent-onkiszolgalo-20261119/);
- assert.match(src('server.js'),/westrent-onkiszolgalo-20261119/);
+ assert.match(src('public/index.html'),/westrent-privat-tuning-history-20261119/);
+ assert.match(src('server.js'),/westrent-privat-tuning-history-20261119/);
 });

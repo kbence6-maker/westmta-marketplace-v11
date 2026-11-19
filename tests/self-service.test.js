@@ -21,7 +21,7 @@ test('önkiszolgáló hirdetés és státusz, bevételi hozzáférés',()=>{
  assert.match(db,/function deleteOwnListing/);
  assert.match(db,/function saveIncome/);
  assert.match(sv,/app.get\('\/api\/owner\/finance',adminRequired/);
- assert.match(sv,/app.post\('\/api\/my\/tuning-requests',writeLimit,loginRequired/);
+ assert.match(sv,/app.post\('\/api\/tuning-requests',tuningLimit,handler/);
  assert.match(ui,/data-rented/);
  assert.match(ui,/data-available/);
  assert.match(ui,/data-delete-owned/);
