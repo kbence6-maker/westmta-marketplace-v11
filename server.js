@@ -23,7 +23,7 @@ function startServer(){
  app.use('/api',(req,res,next)=>{res.set('Cache-Control','no-store');next()});
  const authLimit=rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:'draft-7',legacyHeaders:false,message:{error:'Túl sok próbálkozás. Próbáld később.'}});
  const writeLimit=rateLimit({windowMs:60*60*1000,limit:60,standardHeaders:'draft-7',legacyHeaders:false,message:{error:'Túl sok kérés. Próbáld később.'}});
- app.get('/health',(req,res)=>res.json({ok:true,service:'westrent',build:'westrent-privat-tuning-history-20261119'}));
+ app.get('/health',(req,res)=>res.json({ok:true,service:'westrent',build:'westrent-auto-berles-20261119'}));
  app.get('/api/config',(req,res)=>res.json({catalog:getCatalog(),companyName:(process.env.COMPANY_NAME && process.env.COMPANY_NAME!=='IC Autóközpont' ? process.env.COMPANY_NAME : 'WestRent'),companyPhone:process.env.IC_COMPANY_PHONE||'',commission:store.DEFAULT_PCT(),admin:isAdmin(req),user:getUser(req),requiresVerification:false}));
  app.get('/api/stats',(req,res)=>res.json(store.stats()));
  app.get('/api/listings',handler((req,res)=>res.json(store.listListings(req.query,false))));
@@ -59,6 +59,7 @@ function startServer(){
  app.patch('/api/my/listings/:id',writeLimit,loginRequired,handler((req,res)=>res.json(store.updateOwnListing(res.locals.user.id,req.params.id,req.body||{}))));
  app.delete('/api/my/listings/:id',writeLimit,loginRequired,handler((req,res)=>res.json(store.deleteOwnListing(res.locals.user.id,req.params.id))));
  app.post('/api/my/requests',writeLimit,loginRequired,handler((req,res)=>res.status(201).json(store.createRequest(res.locals.user.id,req.body||{}))));
+ app.delete('/api/my/requests/:id',writeLimit,loginRequired,handler((req,res)=>res.json(store.deleteMyRequest(res.locals.user.id,req.params.id))));
  const tuningLimit=rateLimit({windowMs:60*60*1000,limit:5,standardHeaders:'draft-7',legacyHeaders:false,message:{error:'Túl sok tuningkérelem. Próbáld később.'}});
  app.post('/api/tuning-requests',tuningLimit,handler((req,res)=>res.status(201).json(store.createTuningRequest(req.body||{}))));
  app.patch('/api/my/received/:id',writeLimit,loginRequired,handler((req,res)=>res.json(store.reviewPrivateRequest(res.locals.user.id,req.params.id,req.body?.status))));

@@ -35,3 +35,13 @@ Teszt: `npm test` (telepített függőségek szükségesek).
 ## Fontos: előzmények törlése
 
 A Tulajdonosi bevételek felületen egyesével és egyben törölhetők a kézzel rögzített bevételek, valamint a beérkezett tuningmegkeresések. **Végleges törlés**: a bevételi összesítők újraszámolódnak; előtte érdemes az adatbázisról mentést készíteni. Az IC fiókok és autóhirdetések nem törlődnek ettől.
+
+
+## Elfogadott bérlések automatikus kezelése
+
+A játékos a meghirdetett időegységből (nap/hét/hónap) számszerűen megadja, hány egységre kér bérlést.
+A bérbeadó a profiljában közvetlenül Elfogad vagy Elutasít; nincs böngészős megerősítő ablak.
+Elfogadáskor a hirdetés „Bérbe adva” lesz, a többi függő kérelem elutasított, a tulajdonosi kimutatásban pedig megjelenik a díj × egységek alapján számított **várható** összeg és a becsült 5%-os adó.
+Nincs játékbeli átutalás-ellenőrzés, ezért ezek nem bizonyított bevételek és a magánbérlések összege nem feltétlenül céges nyereség.
+A kérelem saját előzményből való törlése a megjelenítést rejti el; függő kérelem esetén egyúttal vissza is vonja a kérést.
+A hangolási űrlap telefonszámot és szabad szöveges igényt fogad.

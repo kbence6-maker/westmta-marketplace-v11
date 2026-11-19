@@ -13,13 +13,14 @@ test('Játékosok nem látnak adót sem hirdetésben, sem publikus API-ban, sem 
  assert.match(client,/fin\.taxPercent/);
 });
 
-test('Egyedi tuningkérelem űrlap pontosan IC telefonszámot kér és bejelentkezés nélkül elküldhető',()=>{
+test('Egyedi tuningkérelem IC telefonszámot és szabad szöveges üzenetet kér',()=>{
  const html=src('public/index.html'),client=src('public/app.js'),server=src('server.js'),db=src('db.js');
  const section=html.match(/<section class="page" id="page-tuning"[\s\S]*?<\/section>/)?.[0];
  assert.ok(section);
  assert.deepEqual([...section.matchAll(/<input\b[^>]*name="([^"]+)"/g)].map(x=>x[1]),['phone']);
- assert.doesNotMatch(section,/<select\b|<textarea\b/);
- assert.match(client,/api\('\/api\/tuning-requests','POST',\{phone:f\.elements\.phone\.value\}\)/);
+ assert.doesNotMatch(section,/<select\b/);
+ assert.match(section,/<textarea name="notes"/);
+ assert.match(client,/api\('\/api\/tuning-requests','POST',\{phone:f\.elements\.phone\.value,notes:f\.elements\.notes\.value\}\)/);
  assert.match(server,/app.post\('\/api\/tuning-requests',tuningLimit,handler/);
  assert.doesNotMatch(server,/app.post\('\/api\/tuning-requests',[^;]*loginRequired/);
  assert.match(db,/const phone=normalizePhone\(input\.phone\)/);

@@ -73,6 +73,14 @@ function initDatabase(){
  ];
  for(const [name,type] of extensions)if(!cols.has(name))db.exec(`ALTER TABLE listings ADD COLUMN ${name} ${type}`);
  db.exec('CREATE INDEX IF NOT EXISTS idx_listings_owner ON listings(owner_user_id); CREATE INDEX IF NOT EXISTS idx_listings_approval ON listings(approval_status)');
+ // Visszafelé kompatibilis bővítés az eddigi hirdetések és bérlési kérelmek megtartásával.
+ const reqCols=new Set(db.pragma('table_info(requests)').map(x=>x.name));
+ if(!reqCols.has('rental_units'))db.exec('ALTER TABLE requests ADD COLUMN rental_units INTEGER NOT NULL DEFAULT 1');
+ if(!reqCols.has('hidden_by_requester'))db.exec('ALTER TABLE requests ADD COLUMN hidden_by_requester INTEGER NOT NULL DEFAULT 0');
+ const incomeCols=new Set(db.pragma('table_info(owner_income)').map(x=>x.name));
+ if(!incomeCols.has('source_request_id'))db.exec("ALTER TABLE owner_income ADD COLUMN source_request_id TEXT NOT NULL DEFAULT ''");
+ if(!incomeCols.has('source_type'))db.exec("ALTER TABLE owner_income ADD COLUMN source_type TEXT NOT NULL DEFAULT 'manual'");
+ db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_income_request_unique ON owner_income(source_request_id) WHERE source_request_id!=''");
  // Meglévő közvetítések átvétele: a nem törölt, függő céges autók magánhirdetésként jelennek meg.
  db.prepare("UPDATE listings SET publication_mode='private',approval_status='approved',commission_pct=0,status=CASE WHEN status='pending' THEN 'active' ELSE status END,updated_at=? WHERE kind='rental' AND publication_mode='brokered'").run(now());
  return db;
@@ -163,8 +171,17 @@ function updateOwnListing(uid,lid,patch){
   conn().prepare("UPDATE listings SET status='removed',updated_at=? WHERE id=?").run(now(),lid);return getListing(lid,true)
  }
  if(patch.action==='rented'){
-  if(old.status!=='active')throw Error('Csak aktív hirdetést lehet bérbe adottnak jelölni.');
-  conn().prepare("UPDATE listings SET status='rented',updated_at=? WHERE id=?").run(now(),lid);return getListing(lid,true)
+  return conn().transaction(()=>{
+   if(old.status!=='active')throw Error('Csak aktív hirdetést lehet bérbe adottnak jelölni.');
+   const ts=now();
+   const result=conn().prepare("UPDATE listings SET status='rented',updated_at=? WHERE id=? AND status='active'").run(ts,lid);
+   if(result.changes!==1)throw Error('A hirdetés állapota időközben megváltozott.');
+   // Kérelem nélküli, kézzel jelölt bérlés: egyetlen meghirdetett időegység alapján számolunk.
+   conn().prepare("INSERT INTO owner_income (id,description,gross,tax,created_at,source_type) VALUES (?,?,?,?,?,?)")
+    .run(id(),str(`${old.brand} ${old.model} · kézi bérbeadás · 1 ${({day:'nap',week:'hét',month:'hónap'})[old.rent_period]||'nap'}`,120),old.price,taxAmount(old.price),ts,'manual_rented');
+   conn().prepare("UPDATE requests SET status='rejected',updated_at=? WHERE listing_id=? AND status='pending'").run(ts,lid);
+   return getListing(lid,true);
+  })();
  }
  if(patch.action==='available'){
   if(old.status!=='rented')throw Error('Csak bérbe adott autó állítható elérhetőre.');
@@ -196,29 +213,64 @@ function reviewBrokerage(lid,decision,commission){const old=conn().prepare('SELE
 function changeStatus(lid,status){if(!['active','rented','removed'].includes(status))throw Error('Érvénytelen állapot.');const r=conn().prepare('UPDATE listings SET status=?,updated_at=? WHERE id=?').run(status,now(),lid);return r.changes?getListing(lid,true):null}
 function createRequest(uid,input){
  const user=getUser(uid);if(!user)throw Error('Nincs felhasználó.');
- const type=str(input.type,20);if(type!=='rental')throw Error('Csak autóbérlési kérelem küldhető.');
- const car_name=str(input.car_name,120),duration=str(input.duration,80),start_date=str(input.start_date,30),description=str(input.description,1000),budget=int(input.budget||0,'Kereted',0);
- let listing_id='',chosenCar='';
- if(type==='rental'){
-  const target=conn().prepare("SELECT * FROM listings WHERE id=? AND kind='rental' AND status='active' AND approval_status='approved'").get(str(input.listing_id,80));
-  if(!target)throw Error('Ez a jármű jelenleg nem bérelhető.');listing_id=target.id;chosenCar=`${target.brand} ${target.model}`;
- }
- if(!duration)throw Error('Add meg a kívánt bérleti időtartamot.');
+ if(str(input.type,20)!=='rental')throw Error('Csak autóbérlési kérelem küldhető.');
+ const target=conn().prepare("SELECT * FROM listings WHERE id=? AND kind='rental' AND status='active' AND approval_status='approved'").get(str(input.listing_id,80));
+ if(!target)throw Error('Ez a jármű jelenleg nem bérelhető.');
+ const units=int(input.units,'Bérlési időtartam',1,365);
+ const period=({day:'nap',week:'hét',month:'hónap'})[target.rent_period]||'nap';
+ const duration=`${units} ${period}`;
+ const start_date=str(input.start_date,30),description=str(input.description,1000);
  const rid=id(),ts=now();
- conn().prepare(`INSERT INTO requests (id,type,status,listing_id,car_name,requester_id,requester_name,phone,budget,duration,start_date,description,commission_pct,source,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
- .run(rid,type,'pending',listing_id, chosenCar,user.id,user.ic_name,user.phone,budget,duration,start_date,description,0,'web',ts,ts);
+ conn().prepare(`INSERT INTO requests (id,type,status,listing_id,car_name,requester_id,requester_name,phone,budget,duration,start_date,description,commission_pct,source,created_at,updated_at,rental_units) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+ .run(rid,'rental','pending',target.id,`${target.brand} ${target.model}`,user.id,user.ic_name,user.phone,0,duration,start_date,description,0,'web',ts,ts,units);
  return {id:rid,status:'pending'};
 }
-function myRequests(uid){return conn().prepare("SELECT * FROM requests WHERE requester_id=? AND type='rental' ORDER BY created_at DESC LIMIT 200").all(uid)}
+function myRequests(uid){return conn().prepare("SELECT * FROM requests WHERE requester_id=? AND type='rental' AND hidden_by_requester=0 ORDER BY created_at DESC LIMIT 200").all(uid)}
+// Törlés a saját előzményekből: nem törli a másik fél adatait vagy a pénzügyi naplót.
+// Ha a kérés még függő, vissza is vonjuk, nehogy a bérbeadó később elfogadhassa.
+function deleteMyRequest(uid,rid){
+ const row=conn().prepare("SELECT id,status FROM requests WHERE id=? AND requester_id=? AND type='rental' AND hidden_by_requester=0").get(rid,uid);
+ if(!row)throw Error('Nem található a saját bérlési kérelmed.');
+ conn().prepare("UPDATE requests SET hidden_by_requester=1,status=CASE WHEN status='pending' THEN 'cancelled' ELSE status END,updated_at=? WHERE id=?").run(now(),rid);
+ return {ok:true};
+}
 function allRequests(){return conn().prepare("SELECT requests.*, ic_users.verified AS requester_verified FROM requests LEFT JOIN ic_users ON requests.requester_id=ic_users.id WHERE requests.type='rental' ORDER BY requests.created_at DESC LIMIT 300").all()}
 function receivedRequests(uid){return conn().prepare("SELECT requests.* FROM requests JOIN listings ON requests.listing_id=listings.id WHERE listings.owner_user_id=? AND listings.kind='rental' AND listings.publication_mode='private' AND requests.type='rental' ORDER BY requests.created_at DESC LIMIT 200").all(uid)}
+// Elfogadás után tranzakción belül lefoglaljuk az autót, az összes többi függő kérést lezárjuk,
+// és csak a tulajdonosi felülethez egy várható összeget naplózunk. Nem valós IC pénzátutalás!
 function reviewPrivateRequest(uid,rid,status){
- if(!['approved','rejected','completed'].includes(status))throw Error('Érvénytelen kérelemállapot.');
- const row=conn().prepare("SELECT requests.id FROM requests JOIN listings ON requests.listing_id=listings.id WHERE requests.id=? AND requests.type='rental' AND listings.kind='rental' AND listings.publication_mode='private' AND listings.owner_user_id=?").get(rid,uid);
- if(!row)throw Error('Nem található saját magánbérleti kérelem.');
- return reviewRequest(rid,status);
+ if(!['approved','rejected'].includes(status))throw Error('Csak elfogadás vagy elutasítás választható.');
+ return conn().transaction(()=>{
+   const r=conn().prepare(`SELECT requests.*, listings.owner_user_id, listings.status AS car_status,
+       listings.price AS unit_price, listings.rent_period, listings.brand, listings.model
+     FROM requests JOIN listings ON requests.listing_id=listings.id
+     WHERE requests.id=? AND requests.type='rental' AND listings.kind='rental'
+       AND listings.publication_mode='private' AND listings.owner_user_id=?`).get(rid,uid);
+   if(!r)throw Error('Nem található saját magánbérleti kérelem.');
+   if(r.status!=='pending')throw Error('Ezt a kérelmet már elbírálták vagy visszavonták.');
+   if(status==='approved' && r.car_status!=='active')throw Error('Az autó már nem elérhető.');
+   const time=now();
+   conn().prepare('UPDATE requests SET status=?,updated_at=? WHERE id=?').run(status,time,rid);
+   if(status==='approved'){
+     conn().prepare("UPDATE listings SET status='rented',updated_at=? WHERE id=? AND status='active'").run(time,r.listing_id);
+     conn().prepare("UPDATE requests SET status='rejected',updated_at=? WHERE listing_id=? AND id!=? AND status='pending'").run(time,r.listing_id,rid);
+     const units=int(r.rental_units||1,'Bérleti egységek',1,365);
+     const gross=units*r.unit_price;
+     if(!Number.isSafeInteger(gross)||gross>999999999999)throw Error('Túl nagy bérleti összeg.');
+     const period=({day:'nap',week:'hét',month:'hónap'})[r.rent_period]||'nap';
+     const desc=`${r.brand} ${r.model} · ${units} ${period} · ${r.requester_name}`;
+     conn().prepare("INSERT OR IGNORE INTO owner_income (id,description,gross,tax,created_at,source_request_id,source_type) VALUES (?,?,?,?,?,?,?)")
+      .run(id(),str(desc,120),gross,taxAmount(gross),time,rid,'accepted_rental');
+   }
+   return conn().prepare('SELECT * FROM requests WHERE id=?').get(rid);
+ })();
 }
-function reviewRequest(rid,status){if(!['pending','approved','rejected','completed'].includes(status))throw Error('Érvénytelen állapot.');const r=conn().prepare('UPDATE requests SET status=?,updated_at=? WHERE id=?').run(status,now(),rid);return r.changes?conn().prepare('SELECT * FROM requests WHERE id=?').get(rid):null}
+// A korábbi tulajdonosi API megtartása kompatibilitásra; automatikus foglalásra csak a fenti útvonal használható.
+function reviewRequest(rid,status){
+ if(!['pending','approved','rejected','completed'].includes(status))throw Error('Érvénytelen állapot.');
+ const r=conn().prepare('UPDATE requests SET status=?,updated_at=? WHERE id=?').run(status,now(),rid);
+ return r.changes?conn().prepare('SELECT * FROM requests WHERE id=?').get(rid):null;
+}
 function stats(){const r=conn().prepare("SELECT COUNT(*) AS total,SUM(CASE WHEN status='active' THEN 1 ELSE 0 END) active,SUM(CASE WHEN status='rented' THEN 1 ELSE 0 END) rented FROM listings WHERE kind='rental' AND status IN ('active','rented')").get();return {total:r.total||0,active:r.active||0,rentals:r.active||0,rented:r.rented||0,users:conn().prepare('SELECT COUNT(*) AS n FROM ic_users').get().n}}
 
 // A befizetés példájából származó 5%: egész dollárra kerekítve.
@@ -240,12 +292,13 @@ function clearTuningHistory(){return conn().prepare('DELETE FROM tuning_requests
 function createTuningRequest(input){
  // Csak a játékbeli telefonszám szükséges, az igény később IC módon egyeztethető.
  const phone=normalizePhone(input.phone);
+ const notes=str(input.notes,1000);if(!notes)throw Error('Írd le, milyen tuningot szeretnél.');
  const rid=id(),created_at=now();
  conn().prepare('INSERT INTO tuning_requests (id,user_id,ic_name,phone,brand,model,tuning,notes,created_at) VALUES (?,?,?,?,?,?,?,?,?)')
- .run(rid,'','',phone,'','','[]','',created_at);
+ .run(rid,'','',phone,'','','[]',notes,created_at);
  return {id:rid,created_at};
 }
 function myTuningRequests(uid){return conn().prepare('SELECT id,brand,model,tuning,notes,created_at FROM tuning_requests WHERE user_id=? ORDER BY created_at DESC LIMIT 100').all(uid).map(x=>({...x,tuning:JSON.parse(x.tuning)}))}
 function ownerTuningRequests(){return conn().prepare('SELECT * FROM tuning_requests ORDER BY created_at DESC LIMIT 300').all().map(x=>({...x,tuning:JSON.parse(x.tuning)}))}
 
-module.exports={getUploadDirectory,saveUploadOwnership,initDatabase,registerUser,loginUser,createSession,findSession,removeSession,listUsers,getUser,verifyUser,deleteUnverifiedUser,publicUser,needsVerify,createOwnListing,getListing,listListings,myListings,updateOwnListing,pendingBrokerages,reviewBrokerage,changeStatus,deleteOwnListing,deleteCompanyListing,createRequest,myRequests,receivedRequests,reviewPrivateRequest,allRequests,reviewRequest,stats,DEFAULT_PCT,taxAmount,saveIncome,incomeReport,deleteIncome,clearIncomeHistory,createTuningRequest,deleteTuningRequest,clearTuningHistory,myTuningRequests,ownerTuningRequests};
+module.exports={getUploadDirectory,saveUploadOwnership,initDatabase,registerUser,loginUser,createSession,findSession,removeSession,listUsers,getUser,verifyUser,deleteUnverifiedUser,publicUser,needsVerify,createOwnListing,getListing,listListings,myListings,updateOwnListing,pendingBrokerages,reviewBrokerage,changeStatus,deleteOwnListing,deleteCompanyListing,createRequest,myRequests,deleteMyRequest,receivedRequests,reviewPrivateRequest,allRequests,reviewRequest,stats,DEFAULT_PCT,taxAmount,saveIncome,incomeReport,deleteIncome,clearIncomeHistory,createTuningRequest,deleteTuningRequest,clearTuningHistory,myTuningRequests,ownerTuningRequests};

@@ -7,7 +7,7 @@ const html=fs.readFileSync(path.join(root,'public/index.html'),'utf8');
 const js=fs.readFileSync(path.join(root,'public/app.js'),'utf8');
 const css=fs.readFileSync(path.join(root,'public/styles.css'),'utf8');
 test('A cégtulajdonos minden látható elemben tulajdonosként jelenik meg',()=>{
-  assert.ok(html.includes('Tulajdonosi <span>bevételek</span>'));
+  assert.ok(html.includes('Tulajdonosi <span>bérlési kimutatás</span>'));
   assert.ok(html.includes('Tulajdonosi jelszó'));
   assert.ok(html.includes('Cégtulajdonos</button>'));
   assert.ok(!/>\s*Admin(?:\s|<)/i.test(html));
