@@ -1,40 +1,33 @@
-# WestRent – IC autókölcsönző
+# WestRent – önkiszolgáló IC autókölcsönző
 
-**Weboldal, nem Discord bot.** A WestRent egy független, kizárólag IC autóbérlési érdeklődéseket kezelő közösségi webportál a WestMTA szerepjátékosai számára. Nem hivatalos WestMTA-oldal, nincs közvetlen MTA-szerverintegráció vagy automatikus játékbeli pénzmozgás.
+Csak játékbeli (IC $) autóbérlésekhez. Nem hivatalos WestMTA-integráció, és nem kapcsolódik a szerver telefonszolgáltatásához vagy pénzrendszeréhez.
 
 ## Funkciók
 
-- A felhasználók IC névvel és IC telefonszámmal regisztrálnak, külön weboldalas jelszóval (sosem játékjelszóval). A szám aktiválását játékbeli IC kódegyeztetéssel az cégtulajdonos végzi.
-- **Pontosan az eredeti 81 jármű** a `cars.js` fájlból, márka → modell választóval. Az Alfa Romeo és Mercedes-Benz márkák megfelelően csoportosítva; a régi tárolt megnevezések továbbra is elfogadhatók.
-- Motor, turbó, váltó, gumi és fék külön választva, az eredeti fokozatokkal (turbó: Állítható és Supercharger is).
-- **Saját autó bérbeadása:** magán = az IC fiók aktiválása után azonnal publikált; céges közvetítés = cégtulajdonosi jóváhagyással, 1–50% IC jutalékkal.
-- **Valódi fájlfeltöltés:** egy JPG/PNG/WebP kép a böngészőből, max. 5 MB; a kliens lehetőség szerint WebP formátumba tömöríti és eltávolítja a metaadatokat. A szerver a képet a `/data/uploads` könyvtárba menti. Korlát 15 kép / fiók / 24 óra és 20 feltöltés / IP / óra. A képek publikusak (hirdetéseken látszanak).
-- Napi/heti/havi IC díj, IC kaució, extrák, bérlési kérelmek, saját profil és cégtulajdonosi felület.
-- Külön **WestRent IC szabályzat** fül, nincs autóeladás, OOC kereskedelem vagy valós pénz.
-- Szintaktikai ellenőrző és tesztek a `tests/` mappában.
+- Minden regisztrált játékos azonnal magánhirdetést adhat fel a 81 V11 járművel, öt tuninggal, saját képpel (max. 5 MB), napi/heti/havi díjjal és kaucióval.
+- A játékos saját hirdetését bármikor **Elérhető / Bérbe adva** állapotra állíthatja, szerkesztheti vagy törölheti; a bérbe adott autó látható marad.
+- Bérlés egyeztetése: időtartam, indulási dátum, IC telefonszám a profilból, üzenet. Az autó hirdetője látja a megkereséseket, nincs jóváhagyási lépés.
+- Egyedi tuningkérelem: márka, modell, 5 V11 tuning és megjegyzés. A kérelmet csak a tulajdonosi felület látja, az igénylő a sajátját.
+- Csak tulajdonosi jelszóval elérhető **Tulajdonosi bevételek**: kézzel felvitt tényleges IC befizetések, becsült 5% adó, nettó összeg, tuningigények.
+- A beküldött példa alapján a kalkulált adó **5%** (17 500 000 $ után 875 000 $). Ez becslés; a játék levonásai eltérhetnek.
+- A már meglévő IC-fiókok, hirdetések, képek és korábbi kérelmek megmaradnak ugyanazon SQLite adatbázisban. Régi, függő céges közvetítések magánhirdetésként automatikusan publikálódnak, kivéve a korábban törölteket.
 
-## Railway telepítés, korábbi verzió frissítése
+## Adatvédelem és működés
 
-1. Készíts mentést a Railway `/data/marketplace.sqlite` adatbázisról, ha van fontos adatod. A régi tábla nem törlődik; új `ic_uploads` tábla jön létre.
-2. **A meglévő privát GitHub repó** tartalmát frissítsd a ZIP-fájlban szereplő projekttel, benne a teljes `public/` mappával. `.env` és `data/` soha ne kerüljön GitHubra.
-3. Railway szolgáltatásnál a **Volume mount path legyen `/data`**. Ide kerül az SQLite és a feltöltött képek is. A Volume-ot NE töröld új deploy előtt.
-4. Railway → Variables: `COMPANY_NAME=WestRent`, `DATA_DIR=/data`, `NODE_ENV=production`, `ADMIN_PASSWORD=<új legalább 20 karakteres jelszó>`, `REQUIRE_IC_VERIFICATION=true`, `BROKER_COMMISSION_PERCENT=15`, `PUBLIC_URL=<a saját HTTPS Railway domained>`. A `PORT`-ot a Railway kezeli. `IC_COMPANY_PHONE` akkor adható hozzá, ha már van IC céges telefonszám.
-5. Deploy → ellenőrizd a `/health` végpontot, valamint IC regisztráció, fiókaktiválás, magánhirdetés + fotó, bérlési kérelem, céges kérelem + jóváhagyás folyamatot.
-6. A korábbi Discord bothoz tartozó tokeneket/csatorna ID-kat törölheted a Railway Variables-ból, erre a webes kiadásra nem kellenek.
+Az IC telefonszám nincs ellenőrizve a WestMTA-val. A webes fiókjelszó teljesen különálló, és nem szabad WestMTA-fiókjelszót használni. **Jelszó nélküli IC telefonszám-azonosság igazolása nem történik; az első regisztráló magához kötheti a megadott számot.**
 
-**Biztonság:** A beszélgetésben korábban megosztott Discord-token és adminjelszó kompromittáltnak tekintendő; cseréld őket. Képet csak olyat tölts fel, amit megoszthatsz nyilvánosan. A kliens által végzett képtömörítés nem jelenti azt, hogy minden böngészőben garantált a metaadatok eltávolítása.
+A tulajdonosi bevételek nem láthatók a publikus API-ban: az `/api/owner/finance` kizárólag a külön, 20+ karakteres `ADMIN_PASSWORD` belépés után érhető el. Ez a változónév a kompatibilitás miatt maradt így, a felületen csak „Cégtulajdonos” látható. A tulajdonosi belépés 12 órás, szervermemóriában tárolt munkamenet.
 
-## Helyi futtatás
+A pénzmozgásokat a rendszer **nem érzékeli automatikusan**. A kézzel bevitt bevétel az adó előtti IC bruttó összeg. A rendszer annak 5%-át levonva számolja a becsült nettót. Az eredmények egész dollárra vannak kerekítve.
 
-Node.js 22, `cp .env.example .env` (Windows: fájl átnevezése), beállítások kitöltése, `npm install`, majd `npm start`. Ezt követően `http://localhost:3000`.
+## Railway
 
-Teszt: `npm run check`, `npm test` (az adatbázistesztekhez `better-sqlite3` natív modul telepítve kell legyen). A felhasználói UI nem mutat verziószámot.
+1. ZIP **tartalmát** másold a GitHub repository gyökerébe. Ne egy plusz almappát tölts fel.
+2. A Railway-en maradjon meg a meglévő `/data` Volume (és készíts biztonsági mentést a frissítés előtt).
+3. Variables: `DATA_DIR=/data`, `COMPANY_NAME=WestRent`, `PUBLIC_URL=https://westrenting.co.uk`, `ADMIN_PASSWORD=<új erős jelszó>`.
+4. A `REQUIRE_IC_VERIFICATION` és `BROKER_COMMISSION_PERCENT` már nem szükséges; a régi értékük nem befolyásolja az önkiszolgáló működést.
+5. GitHub commit után állítsd be az Auto Deploy-t, vagy kézzel telepítsd az új commitot.
+6. `/health` végponton a `westrent-onkiszolgalo-20261119` buildet keresd. Böngészőben utána `Ctrl+Shift+R`.
 
-**Megjegyzés:** A kizárólag IC tartalom nem jelenti automatikusan, hogy egy külső oldal a WestMTA szabályzata szerint engedélyezett. Az alkalmazás nem kér WestMTA bejelentkezési adatokat és nem használ nem engedélyezett API-t.
-
-
-## Megjelenés és cégtulajdonosi szerep
-- A webes gombok és üzenetek Cégtulajdonos megnevezést használnak (a régi belső `/api/admin/...` útvonalak és az `ADMIN_PASSWORD` Railway változó kompatibilitási okból megmaradnak).
-- A nyitóképet a `public/westrent-hero.webp` fájl tartalmazza.
-- A hivatalos WestMTA szerver szabályzat linkje: https://rules.westmta.com/server
-- A hirdetések és az SQLite-adatbázis nem változik; a meglévő Railway `/data` Volume-ot meg kell tartani.
+Kódszintaxis ellenőrzés: `npm run check`.
+Teszt: `npm test` (telepített függőségek szükségesek).

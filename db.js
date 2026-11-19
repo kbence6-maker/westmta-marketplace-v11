@@ -5,6 +5,7 @@ const path=require('node:path');
 const crypto=require('node:crypto');
 const {CARS,isCatalogCar}=require('./catalog');
 const {FIELDS, options, toList, fromList}=require('./tuning');
+const {TAX_PERCENT,taxAmount}=require('./tax');
 
 const DATA_DIR=process.env.DATA_DIR||process.env.RAILWAY_VOLUME_MOUNT_PATH||path.join(__dirname,'data');
 let db;
@@ -13,7 +14,7 @@ const id=()=>crypto.randomUUID();
 const str=(x,max=200)=>String(x??'').trim().slice(0,max);
 const int=(x,label,min=0,max=999999999999)=>{const n=Number(x);if(!Number.isSafeInteger(n)||n<min||n>max)throw Error(`${label}: ${min}–${max} közötti egész szám kell.`);return n;};
 const DEFAULT_PCT=()=>{const n=Number(process.env.BROKER_COMMISSION_PERCENT||15);return Number.isInteger(n)&&n>=1&&n<=50?n:15};
-const needsVerify=()=>process.env.REQUIRE_IC_VERIFICATION!=='false';
+const needsVerify=()=>false; // Önkiszolgáló IC felület: nincs kötelező jóváhagyás
 
 function initDatabase(){
  fs.mkdirSync(DATA_DIR,{recursive:true});
@@ -48,6 +49,14 @@ function initDatabase(){
  CREATE INDEX IF NOT EXISTS idx_listings_status ON listings(status);
  CREATE INDEX IF NOT EXISTS idx_requests_date ON requests(created_at DESC);
  CREATE INDEX IF NOT EXISTS idx_ic_sessions_expire ON ic_sessions(expires_at);
+ CREATE TABLE IF NOT EXISTS tuning_requests (
+   id TEXT PRIMARY KEY,user_id TEXT NOT NULL,ic_name TEXT NOT NULL,phone TEXT NOT NULL,
+   brand TEXT NOT NULL,model TEXT NOT NULL,tuning TEXT NOT NULL,notes TEXT NOT NULL DEFAULT '',
+   created_at TEXT NOT NULL
+ );
+ CREATE TABLE IF NOT EXISTS owner_income (
+   id TEXT PRIMARY KEY,description TEXT NOT NULL,gross INTEGER NOT NULL,tax INTEGER NOT NULL,created_at TEXT NOT NULL
+ );
  CREATE TABLE IF NOT EXISTS ic_uploads (
    filename TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL REFERENCES ic_users(id) ON DELETE CASCADE,
    created_at TEXT NOT NULL
@@ -64,10 +73,12 @@ function initDatabase(){
  ];
  for(const [name,type] of extensions)if(!cols.has(name))db.exec(`ALTER TABLE listings ADD COLUMN ${name} ${type}`);
  db.exec('CREATE INDEX IF NOT EXISTS idx_listings_owner ON listings(owner_user_id); CREATE INDEX IF NOT EXISTS idx_listings_approval ON listings(approval_status)');
+ // Meglévő közvetítések átvétele: a nem törölt, függő céges autók magánhirdetésként jelennek meg.
+ db.prepare("UPDATE listings SET publication_mode='private',approval_status='approved',commission_pct=0,status=CASE WHEN status='pending' THEN 'active' ELSE status END,updated_at=? WHERE kind='rental' AND publication_mode='brokered'").run(now());
  return db;
 }
 const conn=()=>db||initDatabase();
-function publicUser(u){return u?{id:u.id,ic_name:u.ic_name,phone:u.phone,verified:!!u.verified,verification_code:u.verified?'':u.verification_code,created_at:u.created_at}:null}
+function publicUser(u){return u?{id:u.id,ic_name:u.ic_name,phone:u.phone,verified:!!u.verified,created_at:u.created_at}:null}
 function hashPassword(p){const salt=crypto.randomBytes(16).toString('hex');return `${salt}:${crypto.scryptSync(p,salt,64).toString('hex')}`}
 function checkPassword(p,stored){const [salt,digest]=String(stored||'').split(':');if(!salt||!/^[a-f0-9]{128}$/.test(digest||''))return false;const received=crypto.scryptSync(p,salt,64);return crypto.timingSafeEqual(Buffer.from(digest,'hex'),received)}
 function normalizePhone(s){const phone=str(s,35);if(!/^[+0-9][0-9+\- ]{4,29}$/.test(phone))throw Error('Érvényes, legalább 5 karakteres IC telefonszám szükséges.');return phone.replace(/[ \-]/g,'')}
@@ -76,7 +87,7 @@ function registerUser(input){
  if(ic_name.length<3||ic_name.length>70)throw Error('A karakter neve legalább 3 karakter legyen.');
  if(password.length<10||password.length>128)throw Error('A jelszó legalább 10, legfeljebb 128 karakter legyen.');
  if(conn().prepare('SELECT id FROM ic_users WHERE phone=?').get(phone))throw Error('Ez az IC telefonszám már regisztrálva van.');
- const uid=id(),code=crypto.randomInt(100000,999999).toString();
+ const uid=id(),code='';
  conn().prepare('INSERT INTO ic_users (id,ic_name,phone,password_hash,verified,verification_code,created_at) VALUES (?,?,?,?,0,?,?)')
   .run(uid,ic_name,phone,hashPassword(password),code,now());
  return publicUser(getUser(uid));
@@ -93,7 +104,7 @@ function safeListing(r,{privateView=false}={}){if(!r)return null;const {channel_
 function fullCar(input){const brand=str(input.brand,60),model=str(input.model,100);if(!isCatalogCar(brand,model))throw Error('Csak a V11 katalógusban lévő jármű választható.');return {brand,model}}
 function validateListing(input){
  const car=fullCar(input);if(input.kind && input.kind!=='rental')throw Error('A portál kizárólag autóbérlésre használható.');const kind='rental';
- const publication_mode=input.publication_mode==='brokered'?'brokered':'private';
+ const publication_mode='private';
  const price=int(input.price,'Bérleti díj',1);
  const rent_period=['day','week','month'].includes(input.rent_period)?input.rent_period:'day';
  const deposit=int(input.deposit??0,'Kaució');
@@ -109,7 +120,7 @@ function validateListing(input){
 function getUploadDirectory(){return path.join(DATA_DIR,'uploads')}
 function saveUploadOwnership(uid,filename){
  if(!getUser(uid))throw Error('Jelentkezz be a kép feltöltéséhez.');
- if(needsVerify()&&!getUser(uid).verified)throw Error('Az IC fiókod jóváhagyása szükséges a képfeltöltéshez.');
+
  if(!/^[a-f0-9-]{36}\.(?:jpg|png|webp)$/.test(filename))throw Error('Érvénytelen fájlnév.');
  const since=new Date(Date.now()-24*3600000).toISOString();
  const count=conn().prepare('SELECT COUNT(*) n FROM ic_uploads WHERE owner_user_id=? AND created_at>=?').get(uid,since).n;
@@ -123,21 +134,21 @@ function assertOwnImage(uid,url){
  if(!record||record.owner_user_id!==uid)throw Error('Csak a saját feltöltött képedet választhatod ki.');
 }
 function createOwnListing(uid,input){
- const user=getUser(uid);if(!user)throw Error('Nincs felhasználó.');if(needsVerify()&&!user.verified)throw Error('Előbb ellenőriztetned kell az IC telefonszámodat.');
- const d=validateListing(input);assertOwnImage(uid,d.image_url);const pending=d.publication_mode==='brokered',timestamp=now(),rid=id();
+ const user=getUser(uid);if(!user)throw Error('Nincs felhasználó.');
+ const d=validateListing(input);assertOwnImage(uid,d.image_url);const timestamp=now(),rid=id();
  conn().prepare(`INSERT INTO listings (id,brand,model,price,description,phone,image_url,tuning,seller_id,seller_name,status,channel_id,message_id,created_at,updated_at,kind,rent_period,deposit,owner_user_id,publication_mode,approval_status,commission_pct)
  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
  rid,d.brand,d.model,d.price,d.description,user.phone,d.image_url,JSON.stringify(d.tuning),'',user.ic_name,
- pending?'pending':'active','','',timestamp,timestamp,d.kind,d.rent_period,d.deposit,uid,
- d.publication_mode,pending?'pending':'approved',pending?DEFAULT_PCT():0
+ 'active','','',timestamp,timestamp,d.kind,d.rent_period,d.deposit,uid,
+ 'private','approved',0
  );return getListing(rid,true);
 }
 function getListing(listingId,privateView=false){return safeListing(conn().prepare('SELECT * FROM listings WHERE id=?').get(listingId),{privateView})}
 function listListings(filters={},admin=false){
  const clauses=["kind='rental'"];const params={};
- if(!admin){clauses.push("status IN ('active','rented')","approval_status='approved'")}
+ if(!admin){clauses.push("status IN ('active','rented')","approval_status='approved'");if(['active','rented'].includes(filters.status)){clauses.push('status=@status');params.status=filters.status}}
  else if(filters.status&&['active','pending','sold','rented','removed'].includes(filters.status)){clauses.push('status=@status');params.status=filters.status}
- if(['private','brokered'].includes(filters.mode)){clauses.push('publication_mode=@mode');params.mode=filters.mode}
+
  if(filters.query){clauses.push('(brand LIKE @query OR model LIKE @query)');params.query='%'+str(filters.query,60).replace(/[%_]/g,'')+'%'}
  const where=clauses.length?'WHERE '+clauses.join(' AND '):'';
  const limit=Math.min(Math.max(Number(filters.limit)||24,1),100),offset=Math.max(Number(filters.offset)||0,0);
@@ -156,14 +167,13 @@ function updateOwnListing(uid,lid,patch){
   conn().prepare("UPDATE listings SET status='rented',updated_at=? WHERE id=?").run(now(),lid);return getListing(lid,true)
  }
  if(patch.action==='available'){
-  if(old.status!=='rented'||old.approval_status!=='approved')throw Error('Csak jóváhagyott bérbe adott autó állítható elérhetőre.');
+  if(old.status!=='rented')throw Error('Csak bérbe adott autó állítható elérhetőre.');
   conn().prepare("UPDATE listings SET status='active',updated_at=? WHERE id=?").run(now(),lid);return getListing(lid,true)
  }
  const d=validateListing({...old,tuning:old.tuning,...patch});assertOwnImage(uid,d.image_url);
- const needsApproval=d.publication_mode==='brokered'; // szerkesztett közvetített hirdetés újra jóváhagyandó
  conn().prepare(`UPDATE listings SET brand=?,model=?,price=?,description=?,image_url=?,tuning=?,kind=?,rent_period=?,deposit=?,publication_mode=?,approval_status=?,status=?,commission_pct=?,updated_at=? WHERE id=?`).run(
  d.brand,d.model,d.price,d.description,d.image_url,JSON.stringify(d.tuning),d.kind,d.rent_period,d.deposit,d.publication_mode,
- needsApproval?'pending':'approved',needsApproval?'pending':'active',needsApproval?DEFAULT_PCT():0,now(),lid
+ 'approved',old.status==='rented'?'rented':'active',0,now(),lid
  );return getListing(lid,true)
 }
 // Hirdetés törlése: státusz 'removed', így az adatok és korábbi IC kérelmek megmaradnak.
@@ -209,5 +219,31 @@ function reviewPrivateRequest(uid,rid,status){
  return reviewRequest(rid,status);
 }
 function reviewRequest(rid,status){if(!['pending','approved','rejected','completed'].includes(status))throw Error('Érvénytelen állapot.');const r=conn().prepare('UPDATE requests SET status=?,updated_at=? WHERE id=?').run(status,now(),rid);return r.changes?conn().prepare('SELECT * FROM requests WHERE id=?').get(rid):null}
-function stats(){const r=conn().prepare("SELECT COUNT(*) AS total,SUM(CASE WHEN status='active' AND approval_status='approved' THEN 1 ELSE 0 END) active,SUM(CASE WHEN status='active' AND approval_status='approved' THEN 1 ELSE 0 END) rentals,SUM(CASE WHEN status='pending' AND publication_mode='brokered' THEN 1 ELSE 0 END) pending FROM listings WHERE kind='rental'").get();return {total:r.total||0,active:r.active||0,rentals:r.rentals||0,pending:r.pending||0,users:conn().prepare('SELECT COUNT(*) AS n FROM ic_users').get().n}}
-module.exports={getUploadDirectory,saveUploadOwnership,initDatabase,registerUser,loginUser,createSession,findSession,removeSession,listUsers,getUser,verifyUser,deleteUnverifiedUser,publicUser,needsVerify,createOwnListing,getListing,listListings,myListings,updateOwnListing,pendingBrokerages,reviewBrokerage,changeStatus,deleteOwnListing,deleteCompanyListing,createRequest,myRequests,receivedRequests,reviewPrivateRequest,allRequests,reviewRequest,stats,DEFAULT_PCT};
+function stats(){const r=conn().prepare("SELECT COUNT(*) AS total,SUM(CASE WHEN status='active' THEN 1 ELSE 0 END) active,SUM(CASE WHEN status='rented' THEN 1 ELSE 0 END) rented FROM listings WHERE kind='rental' AND status IN ('active','rented')").get();return {total:r.total||0,active:r.active||0,rentals:r.active||0,rented:r.rented||0,users:conn().prepare('SELECT COUNT(*) AS n FROM ic_users').get().n}}
+
+// A befizetés példájából származó 5%: egész dollárra kerekítve.
+function saveIncome(input){
+ const description=str(input.description,120);if(!description)throw Error('Add meg, miből származott a bevétel.');
+ const gross=int(input.gross,'Bevétel',1,999999999999),tax=taxAmount(gross),created_at=now(),rid=id();
+ conn().prepare('INSERT INTO owner_income (id,description,gross,tax,created_at) VALUES (?,?,?,?,?)').run(rid,description,gross,tax,created_at);
+ return {id:rid,description,gross,tax,net:gross-tax,created_at};
+}
+function incomeReport(){
+ const rows=conn().prepare('SELECT * FROM owner_income ORDER BY created_at DESC LIMIT 500').all();
+ const sum=conn().prepare('SELECT COALESCE(SUM(gross),0) gross, COALESCE(SUM(tax),0) tax, COUNT(*) count FROM owner_income').get();
+ return {rows,summary:{gross:sum.gross,tax:sum.tax,net:sum.gross-sum.tax,count:sum.count},taxPercent:TAX_PERCENT};
+}
+function deleteIncome(id){return conn().prepare('DELETE FROM owner_income WHERE id=?').run(str(id,80)).changes>0}
+function createTuningRequest(uid,input){
+ const user=getUser(uid);if(!user)throw Error('Jelentkezz be az egyedi tuningigényhez.');
+ const car=fullCar(input),src=input.tuning||{};const tuning={};
+ for(const [key] of FIELDS){const v=str(src[key]||'Gyári',30);if(!options(key).includes(v))throw Error('Érvénytelen tuning: '+key);tuning[key]=v}
+ const notes=str(input.notes,1000),rid=id(),created_at=now();
+ conn().prepare('INSERT INTO tuning_requests (id,user_id,ic_name,phone,brand,model,tuning,notes,created_at) VALUES (?,?,?,?,?,?,?,?,?)')
+ .run(rid,uid,user.ic_name,user.phone,car.brand,car.model,JSON.stringify(toList(tuning)),notes,created_at);
+ return {id:rid,created_at};
+}
+function myTuningRequests(uid){return conn().prepare('SELECT id,brand,model,tuning,notes,created_at FROM tuning_requests WHERE user_id=? ORDER BY created_at DESC LIMIT 100').all(uid).map(x=>({...x,tuning:JSON.parse(x.tuning)}))}
+function ownerTuningRequests(){return conn().prepare('SELECT * FROM tuning_requests ORDER BY created_at DESC LIMIT 300').all().map(x=>({...x,tuning:JSON.parse(x.tuning)}))}
+
+module.exports={getUploadDirectory,saveUploadOwnership,initDatabase,registerUser,loginUser,createSession,findSession,removeSession,listUsers,getUser,verifyUser,deleteUnverifiedUser,publicUser,needsVerify,createOwnListing,getListing,listListings,myListings,updateOwnListing,pendingBrokerages,reviewBrokerage,changeStatus,deleteOwnListing,deleteCompanyListing,createRequest,myRequests,receivedRequests,reviewPrivateRequest,allRequests,reviewRequest,stats,DEFAULT_PCT,taxAmount,saveIncome,incomeReport,deleteIncome,createTuningRequest,myTuningRequests,ownerTuningRequests};

@@ -6,7 +6,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "check": "node --check index.js && node --check db.js && node --check server.js && node --check public/app.js",
+    "check": "node --check index.js && node --check db.js && node --check tax.js && node --check server.js && node --check public/app.js",
     "test": "node --test tests/*.test.js"
   },
   "engines": {

@@ -21,12 +21,12 @@ test('A képek nem vágódnak le, bérbe adott jelzés és törlésgomb létezik
  const app=src('public/app.js'),css=src('public/styles.css');
  assert.match(app,/Jelenleg bérbe adva/);
  assert.match(app,/data-delete-owned/);
- assert.match(app,/data-delete-company/);
+ assert.match(app,/data-delete-owned/);
  assert.match(app,/Teljes méretű járműkép megnyitása/);
  assert.match(css,/\.detail-image img\{width:100%;height:100%;object-fit:contain/);
  assert.match(css,/westrent-hero-user-car\.png/);
 });
 test('A feltöltött fájlok gyökérből induló Railway csomagba valók',()=>{
- assert.match(src('public/index.html'),/foto-torles-20261119/);
- assert.match(src('server.js'),/foto-torles-20261119/);
+ assert.match(src('public/index.html'),/westrent-onkiszolgalo-20261119/);
+ assert.match(src('server.js'),/westrent-onkiszolgalo-20261119/);
 });
