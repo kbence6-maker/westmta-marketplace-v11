@@ -4,12 +4,12 @@
 
 ## Funkciók
 
-- A felhasználók IC névvel és IC telefonszámmal regisztrálnak, külön weboldalas jelszóval (sosem játékjelszóval). A szám aktiválását játékbeli IC kódegyeztetéssel az admin végzi.
+- A felhasználók IC névvel és IC telefonszámmal regisztrálnak, külön weboldalas jelszóval (sosem játékjelszóval). A szám aktiválását játékbeli IC kódegyeztetéssel az cégtulajdonos végzi.
 - **Pontosan az eredeti 81 jármű** a `cars.js` fájlból, márka → modell választóval. Az Alfa Romeo és Mercedes-Benz márkák megfelelően csoportosítva; a régi tárolt megnevezések továbbra is elfogadhatók.
 - Motor, turbó, váltó, gumi és fék külön választva, az eredeti fokozatokkal (turbó: Állítható és Supercharger is).
-- **Saját autó bérbeadása:** magán = az IC fiók aktiválása után azonnal publikált; céges közvetítés = admin jóváhagyással, 1–50% IC jutalékkal.
+- **Saját autó bérbeadása:** magán = az IC fiók aktiválása után azonnal publikált; céges közvetítés = cégtulajdonosi jóváhagyással, 1–50% IC jutalékkal.
 - **Valódi fájlfeltöltés:** egy JPG/PNG/WebP kép a böngészőből, max. 5 MB; a kliens lehetőség szerint WebP formátumba tömöríti és eltávolítja a metaadatokat. A szerver a képet a `/data/uploads` könyvtárba menti. Korlát 15 kép / fiók / 24 óra és 20 feltöltés / IP / óra. A képek publikusak (hirdetéseken látszanak).
-- Napi/heti/havi IC díj, IC kaució, extrák, bérlési kérelmek, saját profil és adminpanel.
+- Napi/heti/havi IC díj, IC kaució, extrák, bérlési kérelmek, saját profil és cégtulajdonosi felület.
 - Külön **WestRent IC szabályzat** fül, nincs autóeladás, OOC kereskedelem vagy valós pénz.
 - Szintaktikai ellenőrző és tesztek a `tests/` mappában.
 
@@ -31,3 +31,10 @@ Node.js 22, `cp .env.example .env` (Windows: fájl átnevezése), beállítások
 Teszt: `npm run check`, `npm test` (az adatbázistesztekhez `better-sqlite3` natív modul telepítve kell legyen). A felhasználói UI nem mutat verziószámot.
 
 **Megjegyzés:** A kizárólag IC tartalom nem jelenti automatikusan, hogy egy külső oldal a WestMTA szabályzata szerint engedélyezett. Az alkalmazás nem kér WestMTA bejelentkezési adatokat és nem használ nem engedélyezett API-t.
+
+
+## Megjelenés és cégtulajdonosi szerep
+- A webes gombok és üzenetek Cégtulajdonos megnevezést használnak (a régi belső `/api/admin/...` útvonalak és az `ADMIN_PASSWORD` Railway változó kompatibilitási okból megmaradnak).
+- A nyitóképet a `public/westrent-hero.webp` fájl tartalmazza.
+- A hivatalos WestMTA szerver szabályzat linkje: https://rules.westmta.com/server
+- A hirdetések és az SQLite-adatbázis nem változik; a meglévő Railway `/data` Volume-ot meg kell tartani.

@@ -26,3 +26,50 @@
 .rules-grid p{font-size:13px;color:#b3bccd;margin:0}
 .admin-car-photo{display:block;width:min(240px,100%);height:135px;border-radius:8px;object-fit:cover;margin:10px 0}
 @media(max-width:650px){.rules-grid{grid-template-columns:1fr}}
+
+
+/* WestRent – fotós nyitófelület; a feltöltött képek nem kerülnek bele. */
+.hero{
+  min-height:405px;
+  grid-template-columns:1fr;
+  border:1px solid #49323b;
+  background-image:linear-gradient(90deg,rgba(8,9,13,.96) 0%,rgba(8,9,13,.86) 28%,rgba(8,9,13,.46) 56%,rgba(8,9,13,.04) 90%),url('/westrent-hero.webp');
+  background-size:cover;
+  background-position:center center;
+  box-shadow:0 16px 60px rgba(0,0,0,.22);
+}
+.hero-copy{position:relative;max-width:660px;padding:58px 45px 58px 52px}
+.hero h1{max-width:620px;text-shadow:0 2px 26px #000b}
+.hero p{color:#c7cbd5;max-width:510px;text-shadow:0 2px 16px #000d}
+.hero::after{content:'WESTRENT  •  IC AUTÓKÖLCSÖNZŐ';position:absolute;bottom:18px;right:22px;border:1px solid #b33c4b90;border-radius:6px;padding:9px 12px;background:#0d1015b5;color:#f9a0ad;font-size:10px;font-weight:800;letter-spacing:1.5px}
+.service.highlight{background:linear-gradient(150deg,#291924,#141822);border-color:#6c3444}
+.nav-link:hover,.nav-link.current{background:#32202b;color:#fff}
+.nav-link.current{box-shadow:inset 3px 0 0 #f04d64}
+.rules-official-link{margin:6px 0 0;font-size:11px}
+.rules-official-link a{display:inline-block;margin-left:5px;color:#ff97a5;text-decoration:underline;text-underline-offset:3px}
+.rules-official-link a:hover{color:#fff}
+@media(max-width:850px){.hero{min-height:340px;background-position:62% center}.hero-copy{max-width:590px;padding:42px 35px}}
+@media(max-width:580px){.hero{min-height:385px;background-image:linear-gradient(90deg,rgba(7,8,13,.95),rgba(7,8,13,.71)),url('/westrent-hero.webp');background-position:67% center}.hero-copy{padding:32px 24px 64px}.hero::after{bottom:12px;right:13px;font-size:8px}}
+
+
+/* ---- 2026-11-19 frissítés: user autós háttér, teljes képes hirdetésnézet, bérbe adva állapot látszik ---- */
+.hero{
+  background-image:linear-gradient(90deg,rgba(7,9,14,.97) 0%,rgba(7,9,14,.90) 28%,rgba(7,9,14,.55) 58%,rgba(7,9,14,.16) 100%),url('/westrent-hero-user-car.png') !important;
+  background-position:center 60% !important;
+}
+.vehicle{position:relative}
+.vehicle-media{height:220px;background:linear-gradient(180deg,#101521,#171c29 70%,#101521)}
+.vehicle-media img{width:100%;height:100%;object-fit:contain;background:#101521}
+.vehicle-status{position:absolute;right:14px;bottom:14px;border-radius:999px;padding:7px 10px;font-size:10px;font-weight:800;letter-spacing:.3px;border:1px solid #5b5675;background:#171a26ee;color:#d8def0}
+.vehicle-status.rented{border-color:#8b6f35;background:#2b2415ef;color:#ffd992}
+.detail-image{height:min(58vh,420px);background:#11151f;border:1px solid #30384c;overflow:auto}
+.detail-image a{display:block;width:100%;height:100%}
+.detail-image img{width:100%;height:100%;object-fit:contain;background:#11151f}
+.detail-image-hint{margin:-8px 0 16px;color:#97a1b7;font-size:11px}
+.detail-status{display:inline-flex;align-items:center;gap:7px;margin:4px 0 10px;padding:8px 11px;border-radius:999px;border:1px solid #4e5771;background:#1e2433;color:#d6dcef;font-size:11px;font-weight:700}
+.detail-status.rented{border-color:#8b6f35;background:#2d2616;color:#ffd992}
+.primary[disabled]{opacity:.55;cursor:not-allowed}
+@media(max-width:580px){
+  .vehicle-media{height:200px}
+  .detail-image{height:min(48vh,310px)}
+}

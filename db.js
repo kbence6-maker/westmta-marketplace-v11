@@ -135,7 +135,7 @@ function createOwnListing(uid,input){
 function getListing(listingId,privateView=false){return safeListing(conn().prepare('SELECT * FROM listings WHERE id=?').get(listingId),{privateView})}
 function listListings(filters={},admin=false){
  const clauses=["kind='rental'"];const params={};
- if(!admin){clauses.push("status='active'","approval_status='approved'")}
+ if(!admin){clauses.push("status IN ('active','rented')","approval_status='approved'")}
  else if(filters.status&&['active','pending','sold','rented','removed'].includes(filters.status)){clauses.push('status=@status');params.status=filters.status}
  if(['private','brokered'].includes(filters.mode)){clauses.push('publication_mode=@mode');params.mode=filters.mode}
  if(filters.query){clauses.push('(brand LIKE @query OR model LIKE @query)');params.query='%'+str(filters.query,60).replace(/[%_]/g,'')+'%'}
