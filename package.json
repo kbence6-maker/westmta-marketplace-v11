@@ -1,26 +1,22 @@
 {
-  "name": "westmta-marketplace-v11-integralt",
-  "version": "2.2.0",
+  "name": "westrent-ic-rental",
+  "version": "1.0.0",
   "private": true,
-  "description": "WestMTA V11 eredeti 81 jármű + ötkategóriás tuning + Discord és web",
+  "description": "WestRent: kizárólag IC autóbérlés webes portál, fényképfeltöltéssel és Railway volume tárolással.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js",
-    "check": "node --check index.js && node --check bot.js && node --check db.js && node --check server.js"
+    "check": "node --check index.js && node --check db.js && node --check server.js && node --check public/app.js",
+    "test": "node --test tests/*.test.js"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20"
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",
-    "discord.js": "^14.28.1",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.0.0"
-  },
-  "allowScripts": {
-    "better-sqlite3@12.11.1": true
   }
 }

@@ -1,13 +1,16 @@
-// WestMTA V11: kizárólag a felhasználó 81 járműves eredeti listája.
+// Eredeti 81 jármű változtatás nélkül a cars.js fájlból.
 const CARS = require('./cars');
-function getCatalog(){
- const result={};
- for(const full of CARS){
-  const split=full.indexOf(' ');
-  const brand=split<0?full:full.slice(0,split);
-  const model=split<0?full:full.slice(split+1);
-  (result[brand]??=[]).push(model);
- }
- return Object.fromEntries(Object.entries(result).sort(([a],[b])=>a.localeCompare(b,'hu')));
+function splitCar(full){
+  if(full.startsWith('Alfa Romeo '))return {brand:'Alfa Romeo',model:full.slice('Alfa Romeo '.length)};
+  if(full.startsWith('Mercedes-Benz '))return {brand:'Mercedes-Benz',model:full.slice('Mercedes-Benz '.length)};
+  if(full.startsWith('Mercedes Benz '))return {brand:'Mercedes-Benz',model:full.slice('Mercedes Benz '.length)};
+  const pos=full.indexOf(' ');
+  return pos<0?{brand:full,model:''}:{brand:full.slice(0,pos),model:full.slice(pos+1)};
 }
-module.exports={getCatalog,CARS};
+function getCatalog(){
+  const result={};
+  for(const full of CARS){const {brand,model}=splitCar(full);(result[brand]??=[]).push(model)}
+  return Object.fromEntries(Object.entries(result).sort(([a],[b])=>a.localeCompare(b,'hu')));
+}
+function isCatalogCar(brand,model){return (getCatalog()[brand]||[]).includes(model)||CARS.includes(`${brand} ${model}`)}
+module.exports={getCatalog,CARS,splitCar,isCatalogCar};
