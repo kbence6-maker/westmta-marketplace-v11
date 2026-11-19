@@ -1,17 +1,13 @@
-# WestRent Railway – gyors telepítés
+# WestRent frissítés – hirdetés törlése és képek
 
-1. Mentsd le a meglévő `/data/marketplace.sqlite` adatbázist (ha van adat).
-2. A **meglévő** privát GitHub-repositoryban cseréld a forrásfájlokat a WestRent csomagjára. A `.env` és a `data` könyvtár nem tölthető fel.
-3. Railway → szolgáltatás → Volume → mount path: **`/data`**. A fotók `/data/uploads` alá kerülnek. A Volume maradjon minden deploynál.
-4. Railway → Variables → `COMPANY_NAME=WestRent`; `DATA_DIR=/data`; `NODE_ENV=production`; `REQUIRE_IC_VERIFICATION=true`; `BROKER_COMMISSION_PERCENT=15`; `ADMIN_PASSWORD` új, erős, minimum 20 karakteres jelszó; `PUBLIC_URL` = saját Railway HTTPS-cím. `IC_COMPANY_PHONE` opcionális.
-5. Deploy. Healthcheck `/health`. Kattints: IC regisztráció → cégtulajdonosi IC ellenőrzés → autó bérbeadása → márka/modell → kép kiválasztása → hirdetés → bérlési kérelem → céges közvetítés jóváhagyása.
-6. A korábbi Discord-token és csatorna-ID-k NEM szükségesek. A korábban megosztott titkokat cseréld le.
+**Ez a ZIP gyökérben tartalmazza a projektfájlokat** (`index.js`, `server.js`, `db.js`, `public/`). Nincs benne `WestRent-Updated/` nevű extra mappa.
 
-Ha a képek újraindulás után eltűnnek, akkor a `/data` Volume csatolása hiányzik/hibás. A csomag nem tartalmaz bejelentkezési titkokat.
+1. GitHub repository gyökerében cseréld a fájlokat. Ne hozz létre új almappát.
+2. Ha a Railway-en az **Auto deploy is disabled** felirat látszik, kapcsold be, vagy a legutóbbi GitHub commitnál manuálisan telepíts.
+3. Új deployment **Active** állapota után nyisd meg: `https://westrenting.co.uk/health`. Ellenőrizd a `build` mezőt: `foto-torles-20261119`.
+4. Böngészőben `Ctrl+Shift+R` frissítés, majd a Saját profil / hirdetés törlése teszt.
+5. Railway Volume `/data` maradjon meg. Ne töröld vagy módosítsd a meglévő adatbázist.
 
+A hirdetés törlése **logikai törlés**: a nyilvános listából és saját aktív hirdetések közül eltűnik, a DB-ben viszont megmarad a történet a kérelmek miatt. Bérbe adott autó esetén is megengedett.
 
-## Megjelenés és cégtulajdonosi szerep
-- A webes gombok és üzenetek Cégtulajdonos megnevezést használnak (a régi belső `/api/admin/...` útvonalak és az `ADMIN_PASSWORD` Railway változó kompatibilitási okból megmaradnak).
-- A nyitóképet a `public/westrent-hero.webp` fájl tartalmazza.
-- A hivatalos WestMTA szerver szabályzat linkje: https://rules.westmta.com/server
-- A hirdetések és az SQLite-adatbázis nem változik; a meglévő Railway `/data` Volume-ot meg kell tartani.
+Új változó nem szükséges. A weboldalhoz csak a meglévő Railway környezeti változók kellenek.

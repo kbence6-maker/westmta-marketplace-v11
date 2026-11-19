@@ -145,7 +145,7 @@ function listListings(filters={},admin=false){
  const rows=conn().prepare(`SELECT * FROM listings ${where} ORDER BY created_at DESC LIMIT @limit OFFSET @offset`).all({...params,limit,offset});
  return {listings:rows.map(x=>safeListing(x,{privateView:admin})),total,limit,offset};
 }
-function myListings(uid){return conn().prepare("SELECT * FROM listings WHERE owner_user_id=? AND kind='rental' ORDER BY created_at DESC LIMIT 300").all(uid).map(x=>safeListing(x,{privateView:true}))}
+function myListings(uid){return conn().prepare("SELECT * FROM listings WHERE owner_user_id=? AND kind='rental' AND status!='removed' ORDER BY created_at DESC LIMIT 300").all(uid).map(x=>safeListing(x,{privateView:true}))}
 function updateOwnListing(uid,lid,patch){
  const old=conn().prepare("SELECT * FROM listings WHERE id=? AND owner_user_id=? AND kind='rental'").get(lid,uid);if(!old)throw Error('Nem található a saját bérbeadási hirdetés.');
  if(patch.action==='withdraw'){
@@ -155,12 +155,28 @@ function updateOwnListing(uid,lid,patch){
   if(old.status!=='active')throw Error('Csak aktív hirdetést lehet bérbe adottnak jelölni.');
   conn().prepare("UPDATE listings SET status='rented',updated_at=? WHERE id=?").run(now(),lid);return getListing(lid,true)
  }
+ if(patch.action==='available'){
+  if(old.status!=='rented'||old.approval_status!=='approved')throw Error('Csak jóváhagyott bérbe adott autó állítható elérhetőre.');
+  conn().prepare("UPDATE listings SET status='active',updated_at=? WHERE id=?").run(now(),lid);return getListing(lid,true)
+ }
  const d=validateListing({...old,tuning:old.tuning,...patch});assertOwnImage(uid,d.image_url);
  const needsApproval=d.publication_mode==='brokered'; // szerkesztett közvetített hirdetés újra jóváhagyandó
  conn().prepare(`UPDATE listings SET brand=?,model=?,price=?,description=?,image_url=?,tuning=?,kind=?,rent_period=?,deposit=?,publication_mode=?,approval_status=?,status=?,commission_pct=?,updated_at=? WHERE id=?`).run(
  d.brand,d.model,d.price,d.description,d.image_url,JSON.stringify(d.tuning),d.kind,d.rent_period,d.deposit,d.publication_mode,
  needsApproval?'pending':'approved',needsApproval?'pending':'active',needsApproval?DEFAULT_PCT():0,now(),lid
  );return getListing(lid,true)
+}
+// Hirdetés törlése: státusz 'removed', így az adatok és korábbi IC kérelmek megmaradnak.
+// A bérbe adott jármű is törölhető, de a hirdetés azonnal eltűnik a nyilvános listából.
+function deleteOwnListing(uid,lid){
+ const result=conn().prepare("UPDATE listings SET status='removed',updated_at=? WHERE id=? AND owner_user_id=? AND kind='rental' AND status!='removed'").run(now(),lid,uid);
+ if(!result.changes)throw Error('Nem található saját, törölhető hirdetés.');
+ return {ok:true};
+}
+function deleteCompanyListing(lid){
+ const result=conn().prepare("UPDATE listings SET status='removed',updated_at=? WHERE id=? AND kind='rental' AND status!='removed'").run(now(),lid);
+ if(!result.changes)throw Error('Nem található törölhető hirdetés.');
+ return {ok:true};
 }
 function pendingBrokerages(){return conn().prepare("SELECT * FROM listings WHERE kind='rental' AND publication_mode='brokered' AND approval_status='pending' ORDER BY created_at DESC").all().map(x=>safeListing(x,{privateView:true}))}
 function reviewBrokerage(lid,decision,commission){const old=conn().prepare('SELECT * FROM listings WHERE id=?').get(lid);if(!old||old.kind!=='rental'||old.publication_mode!=='brokered'||old.approval_status!=='pending')throw Error('Nincs ilyen függő közvetítési kérelem.');if(!['approved','rejected'].includes(decision))throw Error('Érvénytelen döntés.');const pct=decision==='approved'?int(commission??DEFAULT_PCT(),'Jutalék',1,50):old.commission_pct;
@@ -194,4 +210,4 @@ function reviewPrivateRequest(uid,rid,status){
 }
 function reviewRequest(rid,status){if(!['pending','approved','rejected','completed'].includes(status))throw Error('Érvénytelen állapot.');const r=conn().prepare('UPDATE requests SET status=?,updated_at=? WHERE id=?').run(status,now(),rid);return r.changes?conn().prepare('SELECT * FROM requests WHERE id=?').get(rid):null}
 function stats(){const r=conn().prepare("SELECT COUNT(*) AS total,SUM(CASE WHEN status='active' AND approval_status='approved' THEN 1 ELSE 0 END) active,SUM(CASE WHEN status='active' AND approval_status='approved' THEN 1 ELSE 0 END) rentals,SUM(CASE WHEN status='pending' AND publication_mode='brokered' THEN 1 ELSE 0 END) pending FROM listings WHERE kind='rental'").get();return {total:r.total||0,active:r.active||0,rentals:r.rentals||0,pending:r.pending||0,users:conn().prepare('SELECT COUNT(*) AS n FROM ic_users').get().n}}
-module.exports={getUploadDirectory,saveUploadOwnership,initDatabase,registerUser,loginUser,createSession,findSession,removeSession,listUsers,getUser,verifyUser,deleteUnverifiedUser,publicUser,needsVerify,createOwnListing,getListing,listListings,myListings,updateOwnListing,pendingBrokerages,reviewBrokerage,changeStatus,createRequest,myRequests,receivedRequests,reviewPrivateRequest,allRequests,reviewRequest,stats,DEFAULT_PCT};
+module.exports={getUploadDirectory,saveUploadOwnership,initDatabase,registerUser,loginUser,createSession,findSession,removeSession,listUsers,getUser,verifyUser,deleteUnverifiedUser,publicUser,needsVerify,createOwnListing,getListing,listListings,myListings,updateOwnListing,pendingBrokerages,reviewBrokerage,changeStatus,deleteOwnListing,deleteCompanyListing,createRequest,myRequests,receivedRequests,reviewPrivateRequest,allRequests,reviewRequest,stats,DEFAULT_PCT};
